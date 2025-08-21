@@ -1,0 +1,13 @@
+[package]
+name = "github-activity-check"
+version = "0.1.0"
+edition = "2024"
+description = "CLI tool to check if GitHub repositories are actively maintained. Analyzes commits, contributors, and recent activity to determine project health..."
+
+[dependencies]
+anyhow = "1"
+chrono = { version = "0.4", features = ["serde"] }
+reqwest = { version = "0.12", features = ["json", "rustls-tls"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
