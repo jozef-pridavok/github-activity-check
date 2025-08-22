@@ -6,6 +6,10 @@ use std::env;
 
 static BASE: &str = "https://api.github.com";
 
+const MIN_COMMITS: usize = 100;
+const MIN_CONTRIBUTORS: usize = 3;
+const MAX_DAYS_SINCE_LAST_COMMIT: i64 = 60;
+
 #[derive(Debug, Deserialize)]
 struct CommitInfo {
     sha: String,
@@ -63,7 +67,10 @@ async fn main() -> Result<()> {
         "Project alive        : {}",
         if alive { "ALIVE ✅" } else { "LIKELY DEAD ⚠️" }
     );
-    println!("Criteria: last ≤ 90 days or (contributors ≥ 3 and commits ≥ 100)");
+    println!(
+        "Criteria: last ≤ {} days or (contributors ≥ {} and commits ≥ {})",
+        MAX_DAYS_SINCE_LAST_COMMIT, MIN_CONTRIBUTORS, MIN_COMMITS
+    );
     Ok(())
 }
 
@@ -194,7 +201,7 @@ fn parse_rel_url(link_header: &str, rel: &str) -> Option<String> {
 
 fn is_alive(last_commit_date: &DateTime<Utc>, commits: usize, contributors: usize) -> bool {
     let days_since = (Utc::now() - *last_commit_date).num_days();
-    days_since <= 90 || (contributors >= 3 && commits >= 100)
+    days_since <= MAX_DAYS_SINCE_LAST_COMMIT || (contributors >= MIN_CONTRIBUTORS && commits >= MIN_COMMITS)
 }
 
 fn first_line(s: &str) -> &str {
