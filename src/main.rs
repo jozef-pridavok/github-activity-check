@@ -10,6 +10,9 @@ const MIN_COMMITS: usize = 100;
 const MIN_CONTRIBUTORS: usize = 3;
 const MAX_DAYS_SINCE_LAST_COMMIT: i64 = 60;
 
+const PRS_SCALE: f64 = 10.0;
+const ISSUES_SCALE: f64 = 20.0;
+
 #[derive(Debug, Deserialize)]
 struct CommitInfo {
     sha: String,
@@ -58,7 +61,13 @@ async fn main() -> Result<()> {
     // open issues (use Search API to exclude PRs reliably)
     let open_issues = fetch_open_issues_count(&client, &owner, &repo).await?;
 
-    let alive = is_alive(&last_commit.commit.author.date, commits_count, contributors_count);
+    let alive = is_alive(
+        &last_commit.commit.author.date,
+        commits_count,
+        contributors_count,
+        open_prs,
+        open_issues,
+    );
 
     println!("Repo: {}/{}", owner, repo);
     println!("-------------------------------------------");
@@ -226,9 +235,50 @@ fn parse_rel_url(link_header: &str, rel: &str) -> Option<String> {
     None
 }
 
-fn is_alive(last_commit_date: &DateTime<Utc>, commits: usize, contributors: usize) -> bool {
-    let days_since = (Utc::now() - *last_commit_date).num_days();
-    days_since <= MAX_DAYS_SINCE_LAST_COMMIT || (contributors >= MIN_CONTRIBUTORS && commits >= MIN_COMMITS)
+fn is_alive(
+    last_commit_date: &DateTime<Utc>,
+    commits: usize,
+    contributors: usize,
+    open_prs: usize,
+    open_issues: usize,
+) -> bool {
+    // weights (sum ~ 1.0)
+    const W_RECENCY: f64 = 0.40;
+    const W_COMMITS: f64 = 0.15;
+    const W_CONTRIB: f64 = 0.15;
+    const W_PRS: f64 = 0.15;
+    const W_ISSUES: f64 = 0.15;
+
+    fn clamp01(x: f64) -> f64 {
+        if x < 0.0 {
+            0.0
+        } else if x > 1.0 {
+            1.0
+        } else {
+            x
+        }
+    }
+
+    let days_since = (Utc::now() - *last_commit_date).num_days() as f64;
+
+    // recency: decreases linearly to 0 at 2 * MAX_DAYS_SINCE_LAST_COMMIT (smoother transition)
+    let recency_scale = (MAX_DAYS_SINCE_LAST_COMMIT as f64) * 2.0;
+    let recency_score = clamp01(1.0 - (days_since / recency_scale));
+
+    // other normalized scores
+    let commits_score = clamp01(commits as f64 / MIN_COMMITS as f64);
+    let contributors_score = clamp01(contributors as f64 / MIN_CONTRIBUTORS as f64);
+    let prs_score = clamp01(open_prs as f64 / PRS_SCALE);
+    let issues_score = clamp01(open_issues as f64 / ISSUES_SCALE);
+
+    let weighted = recency_score * W_RECENCY
+        + commits_score * W_COMMITS
+        + contributors_score * W_CONTRIB
+        + prs_score * W_PRS
+        + issues_score * W_ISSUES;
+
+    // final rule: alive if weighted >= 0.50 OR recency is strong (recent commit)
+    weighted >= 0.50 || recency_score >= 0.8
 }
 
 fn first_line(s: &str) -> &str {
