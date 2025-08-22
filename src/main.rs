@@ -48,23 +48,35 @@ async fn main() -> Result<()> {
     )
     .await?;
 
+    // open pull requests (via Link header: per_page=1)
+    let open_prs = fetch_count_via_link(
+        &client,
+        &format!("/repos/{}/{}/pulls?state=open&per_page=1", owner, repo),
+    )
+    .await?;
+
+    // open issues (use Search API to exclude PRs reliably)
+    let open_issues = fetch_open_issues_count(&client, &owner, &repo).await?;
+
     let alive = is_alive(&last_commit.commit.author.date, commits_count, contributors_count);
 
     println!("Repo: {}/{}", owner, repo);
     println!("-------------------------------------------");
-    println!("Commits total         : {}", commits_count);
-    println!("Contributors total    : {}", contributors_count);
-    println!("Last commit           :");
-    println!("  sha                 : {}", last_commit.sha);
+    println!("Commits total            : {}", commits_count);
+    println!("Contributors total       : {}", contributors_count);
+    println!("Open pull requests       : {}", open_prs);
+    println!("Open issues (unresolved) : {}", open_issues);
+    println!("Last commit              :");
+    println!("  sha                    : {}", last_commit.sha);
     println!(
-        "  author              : {} <{}>",
+        "  author                 : {} <{}>",
         last_commit.commit.author.name, last_commit.commit.author.email
     );
-    println!("  date (UTC)          : {}", last_commit.commit.author.date);
-    println!("  message             : {}", first_line(&last_commit.commit.message));
+    println!("  date (UTC)             : {}", last_commit.commit.author.date);
+    println!("  message                : {}", first_line(&last_commit.commit.message));
     println!("-------------------------------------------");
     println!(
-        "Project alive        : {}",
+        "Project alive           : {}",
         if alive { "ALIVE ✅" } else { "LIKELY DEAD ⚠️" }
     );
     println!(
@@ -131,6 +143,21 @@ async fn fetch_commit_count(client: &Client, owner: &str, repo: &str) -> Result<
     let url = format!("{}/search/commits?q=repo:{}/{}", BASE, owner, repo);
     let resp = client.get(url).send().await?.error_for_status()?;
     let body: SearchCommitsResp = resp.json().await?;
+    Ok(body.total_count)
+}
+
+/// Uses the Search Issues API to count open issues (excludes PRs using `is:issue`).
+async fn fetch_open_issues_count(client: &Client, owner: &str, repo: &str) -> Result<usize> {
+    #[derive(Deserialize)]
+    struct SearchIssuesResp {
+        total_count: usize,
+    }
+
+    // Search issues: is:issue is:open repo:owner/repo
+    let query = format!("q=is:issue+is:open+repo:{}/{}", owner, repo);
+    let url = format!("{}/search/issues?{}", BASE, query);
+    let resp = client.get(url).send().await?.error_for_status()?;
+    let body: SearchIssuesResp = resp.json().await?;
     Ok(body.total_count)
 }
 
