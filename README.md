@@ -1,14 +1,17 @@
-# GitHub Activity Check 🔍
+# GitHub Activity Check
 
-A fast and reliable command-line tool written in Rust to check if a GitHub repository is actively maintained.
+A fast command-line tool to check if GitHub repositories are actively maintained.
 
-## Features
+## Quick Start
 
-- **Quick Analysis**: Fetches key repository metrics in seconds
-- **Smart Detection**: Uses multiple criteria to determine project health
-- **Rate Limit Friendly**: Efficiently uses GitHub API with minimal requests
-- **Token Support**: Works with or without GitHub authentication
-- **Robust Parsing**: Handles edge cases and API limitations gracefully
+```bash
+# Basic usage
+github-activity-check rust-lang rust
+
+# With GitHub token (higher rate limits)  
+export GITHUB_TOKEN=your_token_here
+github-activity-check facebook react
+```
 
 ## Installation
 
@@ -20,147 +23,219 @@ cd github-activity-check
 cargo build --release
 ```
 
-The binary will be available at `target/release/github-activity-check`
+Binary will be at `target/release/github-activity-check`
 
 ### Prerequisites
 
-- Rust 1.70+ (uses 2024 edition)
-- Internet connection for GitHub API access
+- Rust 1.70+
+- Optional: GitHub token for higher rate limits
 
 ## Usage
 
-```bash
-github-activity-check <owner> <repo>
-```
-
-### Examples
+### Basic Examples
 
 ```bash
-# Check if the Rust language repository is active
+# Check a repository
 github-activity-check rust-lang rust
 
-# Check a popular JavaScript framework
-github-activity-check facebook react
+# Get JSON output
+github-activity-check rust-lang rust --format json
 
-# Check a smaller project
-github-activity-check user-name project-name
+# Extract specific values
+github-activity-check rust-lang rust --format field:commits_total
+# Output: 304969
+
+github-activity-check rust-lang rust --format field:project_alive  
+# Output: true
 ```
 
-### Sample Output
+### Available Fields
+
+| Field | Description | Example |
+|-------|-------------|---------|
+| `commits_total` | Total number of commits | `304969` |
+| `contributors_total` | Number of contributors | `7888` |
+| `open_pull_requests` | Open PRs count | `789` |
+| `open_issues` | Open issues count | `10645` |
+| `project_alive` | Is project active? | `true` |
+| `last_commit.sha` | Latest commit hash | `abc123...` |
+| `last_commit.date_utc` | Latest commit date | `2025-09-06T00:11:48Z` |
+| `last_commit.message` | Latest commit message | `Fix bug in parser` |
+
+### Configuration File
+
+Create `config.toml`:
+
+```toml
+format = "json"
+min_commits = 100
+min_contributors = 3
+max_days = 60
+```
+
+Use with:
+
+```bash
+github-activity-check rust-lang rust --config-file config.toml
+```
+
+### History Tracking
+
+Track changes over time:
+
+```bash
+# First run - saves current state
+github-activity-check rust-lang rust --history /tmp/rust.json
+
+# Later runs - compares with saved state
+github-activity-check rust-lang rust --history /tmp/rust.json --check commits_total
+echo "Exit code: $?"
+# Exit code: 0 = no change, 1 = small change, 2 = big change
+
+# Use exit code in shell scripts
+if github-activity-check rust-lang rust --history /tmp/rust.json --check project_alive; then
+    echo "No change in project status"
+else
+    echo "Project status changed! (exit code: $?)"
+fi
+```
+
+### Common Use Cases
+
+#### Check if dependency is maintained
+```bash
+github-activity-check serde-rs serde --format field:project_alive
+```
+
+#### Monitor repository in script
+```bash
+#!/bin/bash
+# Check if repository is alive
+if github-activity-check user repo --format field:project_alive | grep -q "false"; then
+    echo "WARNING: Repository appears inactive!"
+fi
+
+# Monitor for changes with exit codes
+github-activity-check user repo --history /tmp/repo.json --check commits_total
+if [ $? -ne 0 ]; then
+    echo "Repository activity changed!"
+    # Send notification, update dashboard, etc.
+fi
+```
+
+#### Bulk analysis
+```bash
+# analyze-repos.sh - Single organization
+for repo in "rust" "cargo" "rustup"; do
+    echo -n "rust-lang/$repo: "
+    if github-activity-check rust-lang $repo --format field:project_alive | grep -q "true"; then
+        echo "✅ ACTIVE"
+    else
+        echo "❌ INACTIVE"
+    fi
+done
+
+# Monitor multiple repos for changes (unique history files)
+for repo in "rust" "cargo" "rustup"; do
+    github-activity-check rust-lang $repo --history "/tmp/rust-lang-${repo}.json" --check project_alive
+    if [ $? -eq 1 ]; then
+        echo "⚠️  rust-lang/${repo}: Status changed"
+    elif [ $? -eq 2 ]; then  
+        echo "🚨 rust-lang/${repo}: Major change detected"
+    fi
+done
+
+# Monitor repos from different owners
+declare -A repos=(
+    ["rust-lang"]="rust cargo"
+    ["microsoft"]="vscode typescript" 
+    ["facebook"]="react"
+)
+
+for owner in "${!repos[@]}"; do
+    for repo in ${repos[$owner]}; do
+        github-activity-check $owner $repo --history "/tmp/${owner}-${repo}.json" --check commits_total
+        if [ $? -gt 0 ]; then
+            echo "📈 ${owner}/${repo}: $? new commits"
+        fi
+    done
+done
+```
+
+## How It Works
+
+The tool analyzes repositories using multiple criteria:
+
+- **Recent activity** (commits, issues, PRs)
+- **Community size** (contributors)
+- **Project maturity** (total commits)
+
+A repository is considered "alive" if it has:
+- Recent commits (within 60 days), OR  
+- Established community (3+ contributors and 100+ commits)
+
+## Command Line Options
 
 ```
-Repo: rust-lang/rust
--------------------------------------------
-Commits total         : 156789
-Contributors total    : 5432
-Last commit           :
-  sha                 : abc123def456...
-  author              : John Doe <john@example.com>
-  date (UTC)          : 2024-08-20 14:30:22 UTC
-  message             : Fix memory leak in parser
--------------------------------------------
-Project alive        : ALIVE ✅
-Criteria: last ≤ 90 days or (contributors ≥ 3 and commits ≥ 100)
+github-activity-check [OPTIONS] <OWNER> <REPO>
+
+Options:
+  --format <FORMAT>              Output format: default, json, field:name
+  --config-file <FILE>           Load settings from TOML file
+  --history <FILE>               Save/load run history
+  --check <FIELD>                Check field changes (sets exit code)
+  --min-commits <N>              Minimum commits threshold (default: 100)
+  --min-contributors <N>         Minimum contributors threshold (default: 3)
+  --max-days <N>                 Maximum days since last commit (default: 60)
+  --verbose                      Show detailed output
+  --help                         Show help
 ```
+
+### Exit Codes (with --check)
+
+Exit code represents **actual change magnitude**:
+
+- **0** = No change detected
+- **Positive number** = Magnitude of change (depends on field type)
+
+**Change calculation by field type:**
+
+| Field Type | Change Measurement | Exit Code = Actual Change |
+|------------|-------------------|--------------------------|
+| Numbers (`commits_total`) | Absolute difference | Exit code = |new - old| |
+| Booleans (`project_alive`) | Status flip | 0 = same, 1 = different |
+| Dates (`last_commit.date_utc`) | **Days difference** | **Exit code = days between commits** |
+| Strings (`last_commit.sha`) | Text change | 0 = same, 1 = different |
+
+**Examples:**
+
+```bash
+# Numbers: Get absolute change
+github-activity-check rust-lang rust --history /tmp/rust.json --check commits_total
+echo "New commits since last check: $?"
+# 0 = no new commits, 156 = 156 new commits
+
+# Dates: Get days difference  
+github-activity-check rust-lang rust --history /tmp/rust.json --check last_commit.date_utc
+echo "Days since commit changed: $?"
+# 0 = same commit, 3 = 3 days newer, 7 = 1 week newer
+
+# Use in conditionals
+if [ $? -gt 100 ]; then
+    echo "More than 100 new commits!"
+elif [ $? -gt 0 ]; then
+    echo "Some activity detected ($? new commits)"
+fi
+```
+
+Use in shell: `echo $?` or `if github-activity-check ...; then`
 
 ## Authentication
 
-For higher rate limits and private repository access, set your GitHub token:
+Set `GITHUB_TOKEN` environment variable to increase rate limits from 60 to 5000 requests/hour.
 
-```bash
-export GITHUB_TOKEN=your_github_personal_access_token
-github-activity-check owner repo
-```
-
-### Creating a GitHub Token
-
-1. Go to [GitHub Settings > Developer settings > Personal access tokens](https://github.com/settings/tokens)
-2. Click "Generate new token (classic)"
-3. Select appropriate scopes (public repositories don't need special permissions)
-4. Copy the token and set it as an environment variable
-
-## Activity Criteria
-
-A repository is considered **ALIVE** if it meets any of these conditions:
-
-- **Recent Activity**: Last commit within 90 days
-- **Established Project**: Has 3+ contributors AND 100+ commits
-
-This dual criteria approach helps identify both:
-- Recently active projects (regardless of size)
-- Mature projects that may have longer periods between commits
-
-## Technical Details
-
-### API Efficiency
-
-The tool uses several optimization strategies:
-
-1. **Link Header Parsing**: Extracts total counts from GitHub's pagination headers
-2. **Search API Fallback**: Uses commit search when Link headers aren't available
-3. **Minimal Requests**: Typically makes only 2-3 API calls per repository
-4. **Smart Caching**: Leverages HTTP client connection pooling
-
-### Dependencies
-
-- **tokio**: Async runtime for efficient HTTP requests
-- **reqwest**: HTTP client with TLS support
-- **serde**: JSON serialization/deserialization
-- **chrono**: Date/time handling with UTC support
-- **anyhow**: Error handling and context
-
-## Error Handling
-
-The tool gracefully handles common scenarios:
-
-- Repository not found (404)
-- Rate limit exceeded (403)
-- Network connectivity issues
-- Invalid repository names
-- Private repositories (without appropriate tokens)
-
-## Contributing
-
-Contributions are welcome! Please feel free to submit a Pull Request. For major changes, please open an issue first to discuss what you would like to change.
-
-### Development
-
-```bash
-# Run with debug output
-cargo run -- owner repo
-
-# Run tests
-cargo test
-
-# Format code
-cargo fmt
-
-# Check for issues
-cargo clippy
-```
+Get token at: https://github.com/settings/tokens (no permissions needed for public repos)
 
 ## License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-## Roadmap
-
-- [ ] Add JSON/CSV output formats
-- [ ] Support for checking multiple repositories at once
-- [ ] Additional activity metrics (issues, pull requests)
-- [ ] Configuration file support
-- [ ] Docker container support
-
-## Why Rust?
-
-This tool is written in Rust for several key advantages:
-
-- **Performance**: Fast startup and execution times
-- **Reliability**: Strong type system prevents runtime errors
-- **Safety**: Memory safety without garbage collection overhead
-- **Concurrency**: Excellent async support for API calls
-- **Cross-platform**: Single binary works across operating systems
-
----
-
-Made with ❤️ in Rust
+MIT License - see LICENSE file for details.
