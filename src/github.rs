@@ -1,7 +1,7 @@
 use anyhow::{Context, Result};
 use reqwest::{Client, header};
 
-use crate::types::{CommitInfo, SearchCommitsResp, SearchIssuesResp};
+use crate::types::{CommitInfo, ReleaseInfo, SearchCommitsResp, SearchIssuesResp};
 
 static BASE: &str = "https://api.github.com";
 
@@ -77,6 +77,25 @@ impl GitHubClient {
         let body: SearchIssuesResp = resp.json().await
             .context("Failed to parse search issues response")?;
         Ok(body.total_count)
+    }
+
+    pub async fn get_latest_release(&self, owner: &str, repo: &str) -> Result<Option<ReleaseInfo>> {
+        let url = format!("{BASE}/repos/{owner}/{repo}/releases/latest");
+        let resp = self.client.get(&url).send().await
+            .with_context(|| format!("Failed to fetch latest release from {url}"))?;
+        
+        // GitHub returns 404 if no releases exist
+        if resp.status() == 404 {
+            return Ok(None);
+        }
+        
+        let resp = resp.error_for_status()
+            .with_context(|| format!("Latest release API error for repository {owner}/{repo}"))?;
+        
+        let release: ReleaseInfo = resp.json().await
+            .context("Failed to parse latest release response")?;
+        
+        Ok(Some(release))
     }
 
     async fn fetch_count_via_link(&self, path_with_query: &str) -> Result<usize> {

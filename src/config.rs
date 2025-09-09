@@ -57,6 +57,11 @@ pub struct Config {
     #[serde(default)]
     pub issues_scale: Option<f64>,
     
+    /// Maximum days since last release for active project
+    #[arg(long)]
+    #[serde(default)]
+    pub max_release_days: Option<i64>,
+    
     /// History file path for storing last run data
     #[arg(long)]
     #[serde(skip)]
@@ -102,6 +107,7 @@ impl Config {
         self.max_days = self.max_days.or(Some(60));
         self.prs_scale = self.prs_scale.or(Some(10.0));
         self.issues_scale = self.issues_scale.or(Some(20.0));
+        self.max_release_days = self.max_release_days.or(Some(365)); // 1 year default
         self
     }
 
@@ -136,6 +142,10 @@ impl Config {
 
     pub fn get_issues_scale(&self) -> f64 {
         self.issues_scale.expect("issues_scale should be set")
+    }
+
+    pub fn get_max_release_days(&self) -> i64 {
+        self.max_release_days.expect("max_release_days should be set")
     }
 
     pub fn validate(&self) -> Result<()> {

@@ -1,19 +1,35 @@
-# GitHub Activity Check Configuration
+# Sample configuration file for github-activity-check
+# Copy this to config.toml and modify as needed
 
-# Output format: "default" or "json"
-format = "json"
+# Output format: "default", "json", or "field:field_name"
+format = "default"
 
-# Minimum number of commits for established project
-min_commits = 150
+# Activity scoring parameters
+min_commits = 100           # Minimum commits for established project
+min_contributors = 3        # Minimum contributors for established project
+max_days = 60              # Maximum days since last commit for active project
+max_release_days = 365     # Maximum days since last release for active project (1 year)
 
-# Minimum number of contributors for established project  
-min_contributors = 5
+# Scaling factors for scoring
+prs_scale = 10.0           # Scale factor for open pull requests scoring
+issues_scale = 20.0        # Scale factor for open issues scoring
 
-# Maximum days since last commit for active project
-max_days = 30
+# Example configurations for different project types:
 
-# Scale for open pull requests scoring
-prs_scale = 15.0
+# For larger projects (stricter requirements):
+# min_commits = 500
+# min_contributors = 10
+# max_days = 30
+# max_release_days = 180
 
-# Scale for open issues scoring
-issues_scale = 25.0
+# For smaller/personal projects (lenient requirements):
+# min_commits = 10
+# min_contributors = 1  
+# max_days = 90
+# max_release_days = 730  # 2 years
+
+# For enterprise/critical dependencies:
+# min_commits = 1000
+# min_contributors = 5
+# max_days = 14
+# max_release_days = 90   # Recent releases important

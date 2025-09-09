@@ -3,7 +3,7 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::str::FromStr;
 
-use crate::types::CommitInfo;
+use crate::types::{CommitInfo, ReleaseInfo};
 use crate::config::Config;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -52,6 +52,7 @@ pub struct RepositoryReport {
     pub open_pull_requests: usize,
     pub open_issues: usize,
     pub last_commit: LastCommitInfo,
+    pub last_release: Option<LastReleaseInfo>,
     pub project_alive: bool,
     pub criteria: CriteriaInfo,
 }
@@ -63,6 +64,14 @@ pub struct LastCommitInfo {
     pub author_email: String,
     pub date_utc: DateTime<Utc>,
     pub message: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LastReleaseInfo {
+    pub tag_name: String,
+    pub name: Option<String>,
+    pub date_utc: Option<DateTime<Utc>>,
+    pub is_prerelease: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -79,6 +88,7 @@ pub fn create_repository_report(
     open_prs: usize,
     open_issues: usize,
     last_commit: &CommitInfo,
+    last_release: Option<&ReleaseInfo>,
     alive: bool,
 ) -> RepositoryReport {
     RepositoryReport {
@@ -95,6 +105,12 @@ pub fn create_repository_report(
             date_utc: last_commit.commit.author.date,
             message: first_line(&last_commit.commit.message).to_string(),
         },
+        last_release: last_release.map(|release| LastReleaseInfo {
+            tag_name: release.tag_name.clone(),
+            name: release.name.clone(),
+            date_utc: release.published_at,
+            is_prerelease: release.prerelease,
+        }),
         project_alive: alive,
         criteria: CriteriaInfo {
             max_days: config.get_max_days(),
@@ -169,6 +185,40 @@ fn print_default_output(config: &Config, report: &RepositoryReport) {
     );
     println!("  date (UTC)             : {}", report.last_commit.date_utc);
     println!("  message                : {}", report.last_commit.message);
+    
+    if let Some(ref release) = report.last_release {
+        println!("Last release             :");
+        println!("  tag                    : {}", release.tag_name);
+        if let Some(ref name) = release.name {
+            println!("  name                   : {}", name);
+        }
+        if let Some(date) = release.date_utc {
+            let days_since_release = chrono::Utc::now().signed_duration_since(date).num_days();
+            println!("  date (UTC)             : {}", date);
+            
+            let release_status = if days_since_release <= config.get_max_release_days() {
+                if release.is_prerelease {
+                    "Recent prerelease ⚡"
+                } else {
+                    "Fresh release ✅"
+                }
+            } else {
+                if release.is_prerelease {
+                    "Stale prerelease ⚠️"
+                } else {
+                    "Stale release ⚠️"
+                }
+            };
+            println!("  status                 : {} ({} days ago)", release_status, days_since_release);
+        } else {
+            println!("  date (UTC)             : Not available");
+            println!("  status                 : Unknown age ❓");
+        }
+        println!("  prerelease             : {}", if release.is_prerelease { "Yes" } else { "No" });
+    } else {
+        println!("Last release             : No releases found");
+    }
+    
     println!("-------------------------------------------");
     println!(
         "Project alive           : {}",

@@ -200,6 +200,7 @@ mod tests {
                 date_utc: Utc::now(),
                 message: "test commit".to_string(),
             },
+            last_release: None,
             project_alive: true,
             criteria: CriteriaInfo {
                 max_days: 60,

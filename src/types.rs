@@ -29,3 +29,12 @@ pub struct SearchCommitsResp {
 pub struct SearchIssuesResp {
     pub total_count: usize,
 }
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct ReleaseInfo {
+    pub tag_name: String,
+    pub name: Option<String>,
+    pub published_at: Option<DateTime<Utc>>,
+    pub prerelease: bool,
+    pub draft: bool,
+}

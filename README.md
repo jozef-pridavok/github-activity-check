@@ -47,6 +47,9 @@ github-activity-check rust-lang rust --format field:commits_total
 
 github-activity-check rust-lang rust --format field:project_alive  
 # Output: true
+
+github-activity-check rust-lang rust --format field:last_release.tag_name
+# Output: 1.89.0
 ```
 
 ### Available Fields
@@ -61,6 +64,10 @@ github-activity-check rust-lang rust --format field:project_alive
 | `last_commit.sha` | Latest commit hash | `abc123...` |
 | `last_commit.date_utc` | Latest commit date | `2025-09-06T00:11:48Z` |
 | `last_commit.message` | Latest commit message | `Fix bug in parser` |
+| `last_release.tag_name` | Latest release version | `1.89.0` |
+| `last_release.name` | Latest release name | `Rust 1.89.0` |
+| `last_release.date_utc` | Latest release date | `2025-08-07T10:55:11Z` |
+| `last_release.is_prerelease` | Is prerelease version | `false` |
 
 ### Configuration File
 
@@ -71,6 +78,7 @@ format = "json"
 min_commits = 100
 min_contributors = 3
 max_days = 60
+max_release_days = 365
 ```
 
 Use with:
@@ -105,6 +113,15 @@ fi
 #### Check if dependency is maintained
 ```bash
 github-activity-check serde-rs serde --format field:project_alive
+```
+
+#### Monitor for new releases
+```bash
+github-activity-check rust-lang rust --history /tmp/rust.json --check last_release.tag_name
+if [ $? -eq 1 ]; then
+    echo "🎉 New Rust release detected!"
+    # Send notification, update CI, etc.
+fi
 ```
 
 #### Monitor repository in script
@@ -169,10 +186,12 @@ The tool analyzes repositories using multiple criteria:
 - **Recent activity** (commits, issues, PRs)
 - **Community size** (contributors)
 - **Project maturity** (total commits)
+- **Release activity** (recent releases, frequency)
 
 A repository is considered "alive" if it has:
 - Recent commits (within 60 days), OR  
-- Established community (3+ contributors and 100+ commits)
+- Established community (3+ contributors and 100+ commits), OR
+- Recent releases (within 365 days) with active development
 
 ## Command Line Options
 
@@ -187,6 +206,7 @@ Options:
   --min-commits <N>              Minimum commits threshold (default: 100)
   --min-contributors <N>         Minimum contributors threshold (default: 3)
   --max-days <N>                 Maximum days since last commit (default: 60)
+  --max-release-days <N>         Maximum days since last release (default: 365)
   --verbose                      Show detailed output
   --help                         Show help
 ```
@@ -206,6 +226,7 @@ Exit code represents **actual change magnitude**:
 | Booleans (`project_alive`) | Status flip | 0 = same, 1 = different |
 | Dates (`last_commit.date_utc`) | **Days difference** | **Exit code = days between commits** |
 | Strings (`last_commit.sha`) | Text change | 0 = same, 1 = different |
+| Release (`last_release.tag_name`) | Version change | 0 = same version, 1 = new release |
 
 **Examples:**
 
@@ -219,6 +240,11 @@ echo "New commits since last check: $?"
 github-activity-check rust-lang rust --history /tmp/rust.json --check last_commit.date_utc
 echo "Days since commit changed: $?"
 # 0 = same commit, 3 = 3 days newer, 7 = 1 week newer
+
+# Releases: Detect new version
+github-activity-check rust-lang rust --history /tmp/rust.json --check last_release.tag_name
+echo "Release change status: $?"
+# 0 = same release, 1 = new release available
 
 # Use in conditionals
 if [ $? -gt 100 ]; then

@@ -64,6 +64,7 @@ async fn run() -> Result<()> {
     let contributors_count = github_client.get_contributors_count(config.get_owner(), config.get_repo()).await?;
     let open_prs = github_client.get_open_prs_count(config.get_owner(), config.get_repo()).await?;
     let open_issues = github_client.get_open_issues_count(config.get_owner(), config.get_repo()).await?;
+    let latest_release = github_client.get_latest_release(config.get_owner(), config.get_repo()).await?;
 
     let alive = scorer.is_project_alive(
         &last_commit.commit.author.date,
@@ -71,6 +72,7 @@ async fn run() -> Result<()> {
         contributors_count,
         open_prs,
         open_issues,
+        latest_release.as_ref(),
         &config,
     );
 
@@ -81,6 +83,7 @@ async fn run() -> Result<()> {
         open_prs,
         open_issues,
         &last_commit,
+        latest_release.as_ref(),
         alive,
     );
 
